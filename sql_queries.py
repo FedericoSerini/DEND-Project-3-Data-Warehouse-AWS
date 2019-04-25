@@ -109,6 +109,7 @@ time_table_create = ("""CREATE TABLE time(
 
 # Load from JSON Arrays Using a JSONPaths file (LOG_JSONPATH),
 # setting COMPUPDATE, STATUPDATE to speed up COPY
+
 staging_events_copy = ("""copy staging_events from '{}'
  credentials 'aws_iam_role={}'
  region 'us-west-2' 
@@ -118,6 +119,7 @@ staging_events_copy = ("""copy staging_events from '{}'
                         config.get('S3','LOG_JSONPATH'))
 
 # setting COMPUPDATE, STATUPDATE to speed up COPY
+
 staging_songs_copy = ("""copy staging_songs from '{}'
     credentials 'aws_iam_role={}'
     region 'us-west-2' 
@@ -129,26 +131,70 @@ staging_songs_copy = ("""copy staging_songs from '{}'
 # FINAL TABLES
 
 songplay_table_insert = ("""INSERT INTO songplays (start_time, user_id, level, song_id, artist_id, session_id, location, user_agent) 
-    VALUES (%s, %s, %s, %s, %s, %s, %s, %s) 
+    SELECT DISTINCT 
+        TIMESTAMP 'epoch' + ts/1000 *INTERVAL '1 second' as start_time, 
+        e.user_id, 
+        e.user_level,
+        s.song_id,
+        s.artist_id,
+        e.session_id,
+        e.location,
+        e.user_agent
+    FROM staging_events e, staging_songs s
+    WHERE e.page = 'NextSong'
+    AND e.song_title = s.title
+    AND user_id NOT IN (SELECT DISTINCT s.user_id FROM songplays s WHERE s.user_id = user_id
+                       AND s.start_time = start_time AND s.session_id = session_id )
+""")
+ 
+user_table_insert = ("""INSERT INTO users (user_id, first_name, last_name, gender, level)  
+    SELECT DISTINCT 
+        user_id,
+        user_first_name,
+        user_last_name,
+        user_gender, 
+        user_level
+    FROM staging_events
+    WHERE page = 'NextSong'
+    AND user_id NOT IN (SELECT DISTINCT user_id FROM users)
 """)
 
-user_table_insert = ("""INSERT INTO users (user_id, first_name, last_name, gender, level) VALUES (%s, %s, %s, %s, %s) 
-    ON CONFLICT (user_id) DO UPDATE SET firstName=users.first_name, lastName=users.last_name, gender=users.gender, level=users.level
+song_table_insert = ("""INSERT INTO songs (song_id, title, artist_id, year, duration) 
+    SELECT DISTINCT 
+        song_id, 
+        title,
+        artist_id,
+        year,
+        duration
+    FROM staging_songs
+    WHERE song_id NOT IN (SELECT DISTINCT song_id FROM songs)
 """)
 
-song_table_insert = ("""INSERT INTO songs (song_id, title, artist_id, year, duration) VALUES (%s, %s, %s, %s, %s)
-    ON CONFLICT (song_id) DO UPDATE SET title=songs.title, artist_id=songs.artist_id,
-    year=songs.year, duration=songs.duration 
+artist_table_insert = ("""INSERT INTO artists (artist_id, name, location, latitude, longitude) 
+    SELECT DISTINCT 
+        artist_id,
+        artist_name,
+        artist_location,
+        artist_latitude,
+        artist_longitude
+    FROM staging_songs
+    WHERE artist_id NOT IN (SELECT DISTINCT artist_id FROM artists)
 """)
 
-artist_table_insert = ("""INSERT INTO artists (artist_id, name, location, latitude, longitude) VALUES (%s, %s, %s, %s, %s)
-    ON CONFLICT (artist_id) DO UPDATE SET name=artists.name, location=artists.location, latitude=artists.latitude, 
-    longitude=artists.longitude 
-""")
-
-time_table_insert = ("""INSERT INTO time (start_time, hour, day, week, month, year, weekday) VALUES (%s, %s, %s, %s, %s, %s, %s)
-    ON CONFLICT (start_time) DO UPDATE SET hour=time.hour, day=time.day, week=time.week, month=time.month, 
-    year=time.year, weekday=time.weekday 
+time_table_insert = ("""INSERT INTO time (start_time, hour, day, week, month, year, weekday)
+    SELECT 
+        start_time, 
+        EXTRACT(hr from start_time) AS hour,
+        EXTRACT(d from start_time) AS day,
+        EXTRACT(w from start_time) AS week,
+        EXTRACT(mon from start_time) AS month,
+        EXTRACT(yr from start_time) AS year, 
+        EXTRACT(weekday from start_time) AS weekday 
+    FROM (
+    	SELECT DISTINCT  TIMESTAMP 'epoch' + ts/1000 *INTERVAL '1 second' as start_time 
+        FROM staging_events s     
+    )
+    WHERE start_time NOT IN (SELECT DISTINCT start_time FROM time)
 """)
 
 # QUERY LISTS
@@ -157,6 +203,3 @@ create_table_queries = [staging_events_table_create, staging_songs_table_create,
 drop_table_queries = [staging_events_table_drop, staging_songs_table_drop, songplay_table_drop, user_table_drop, song_table_drop, artist_table_drop, time_table_drop]
 copy_table_queries = [staging_events_copy, staging_songs_copy]
 insert_table_queries = [songplay_table_insert, user_table_insert, song_table_insert, artist_table_insert, time_table_insert]
-
-
-

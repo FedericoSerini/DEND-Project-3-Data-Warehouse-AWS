@@ -28,9 +28,12 @@ def main():
 
     print('Dropping existing tables if any')
     drop_tables(cur, conn)
+    
+    print('Creating tables')
     create_tables(cur, conn)
 
     conn.close()
+    print('Create table Ended')
 
 
 if __name__ == "__main__":
