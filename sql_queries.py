@@ -79,7 +79,7 @@ user_table_create = ("""CREATE TABLE users(
 song_table_create = ("""CREATE TABLE songs(
     song_id VARCHAR(100),
     title VARCHAR(255),
-    artist_id VARCHAR(100),
+    artist_id VARCHAR(100) NOT NULL,
     year INTEGER,
     duration DOUBLE PRECISION,
     PRIMARY KEY (song_id))

@@ -2,14 +2,18 @@ import configparser
 import psycopg2
 from sql_queries import copy_table_queries, insert_table_queries
 
-
+""" queries that loads data from S3 buckets
+to Redshift
+"""
 def load_staging_tables(cur, conn):
     for query in copy_table_queries:
         print('Loading data by: '+query)
         cur.execute(query)
         conn.commit()
 
-
+""" INSERT statements from staging tables to 
+the dimension and fact tables
+"""
 def insert_tables(cur, conn):
     for query in insert_table_queries:
         print('Transform data by: '+query)
